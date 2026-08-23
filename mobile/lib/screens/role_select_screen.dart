@@ -97,37 +97,38 @@ class RoleSelectScreen extends StatelessWidget {
         ],
       ),
       body: SafeArea(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Spacer(),
+              const SizedBox(height: 12),
               Center(
                 child: Container(
-                  width: 130,
-                  height: 130,
-                  padding: const EdgeInsets.all(12),
+                  width: 140,
+                  height: 140,
+                  padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
                     color: AppTheme.surface,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
+                    borderRadius: BorderRadius.circular(26),
+                    border: Border.all(color: Colors.black.withValues(alpha: 0.04)),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.06),
+                        color: Colors.black.withValues(alpha: 0.07),
                         blurRadius: 24,
                         offset: const Offset(0, 8),
                       ),
                     ],
                   ),
-                  child: ClipOval(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(18),
                     child: Image.asset(
                       'assets/images/app-logo.png',
                       fit: BoxFit.contain,
                       errorBuilder: (ctx, err, stack) => Container(
                         decoration: BoxDecoration(
                           color: AppTheme.providerPeach,
-                          shape: BoxShape.circle,
+                          borderRadius: BorderRadius.circular(18),
                         ),
                         child: const Icon(Icons.bolt_rounded, color: AppTheme.providerPrimary, size: 50),
                       ),
@@ -139,7 +140,7 @@ class RoleSelectScreen extends StatelessWidget {
               const Text(
                 'Instant Local Services',
                 style: TextStyle(
-                  fontSize: 28,
+                  fontSize: 26,
                   fontWeight: FontWeight.w900,
                   color: AppTheme.textPrimary,
                   letterSpacing: -0.5,
@@ -150,13 +151,13 @@ class RoleSelectScreen extends StatelessWidget {
               const Text(
                 'Match instantly with verified local service professionals or manage your customer leads.',
                 style: TextStyle(
-                  fontSize: 14,
+                  fontSize: 13,
                   color: AppTheme.textSecondary,
                   height: 1.4,
                 ),
                 textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 36),
+              const SizedBox(height: 28),
 
               // Role 1: Provider (Warm Coral Gradient Card)
               _buildRoleCard(
@@ -168,7 +169,7 @@ class RoleSelectScreen extends StatelessWidget {
                 badgeBg: AppTheme.providerPeach,
                 role: UserRole.provider,
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 14),
 
               // Role 2: Consumer (Fresh Emerald Green Card)
               _buildRoleCard(
@@ -181,7 +182,7 @@ class RoleSelectScreen extends StatelessWidget {
                 role: UserRole.consumer,
               ),
 
-              const Spacer(flex: 2),
+              const SizedBox(height: 32),
               Center(
                 child: Text(
                   'Connected Server: ${ApiConfig.baseUrl}',
@@ -189,6 +190,7 @@ class RoleSelectScreen extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
+              const SizedBox(height: 8),
             ],
           ),
         ),

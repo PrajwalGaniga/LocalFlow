@@ -103,10 +103,10 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                     children: [
                       // Ambient Glow Aura
                       Container(
-                        width: 180,
-                        height: 180,
+                        width: 190,
+                        height: 190,
                         decoration: BoxDecoration(
-                          shape: BoxShape.circle,
+                          borderRadius: BorderRadius.circular(36),
                           boxShadow: [
                             BoxShadow(
                               color: AppTheme.providerPrimary.withValues(alpha: 0.12),
@@ -117,18 +117,25 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                         ),
                       ),
 
-                      // Logo Container
+                      // Logo Container (Rounded Square with Shadow)
                       Container(
-                        width: 150,
-                        height: 150,
-                        padding: const EdgeInsets.all(12),
+                        width: 155,
+                        height: 155,
+                        padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
                           color: AppTheme.surface,
-                          shape: BoxShape.circle,
+                          borderRadius: BorderRadius.circular(30),
                           border: Border.all(color: Colors.black.withValues(alpha: 0.04)),
-                          boxShadow: AppTheme.cardShadow,
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.08),
+                              blurRadius: 28,
+                              offset: const Offset(0, 10),
+                            ),
+                          ],
                         ),
-                        child: ClipOval(
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(20),
                           child: Image.asset(
                             'assets/images/app-logo.png',
                             fit: BoxFit.contain,
