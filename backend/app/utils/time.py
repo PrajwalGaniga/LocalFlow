@@ -1,8 +1,11 @@
-from datetime import datetime
-from zoneinfo import ZoneInfo
+from datetime import datetime, timezone, timedelta
 
-# Indian Standard Time (IST)
-IST = ZoneInfo("Asia/Kolkata")
+try:
+    from zoneinfo import ZoneInfo
+    IST = ZoneInfo("Asia/Kolkata")
+except Exception:
+    # Standard UTC+5:30 offset for Indian Standard Time (Windows fallback without tzdata)
+    IST = timezone(timedelta(hours=5, minutes=30), name="IST")
 
 
 def now_ist() -> datetime:
