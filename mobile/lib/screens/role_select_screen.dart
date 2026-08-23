@@ -104,26 +104,38 @@ class RoleSelectScreen extends StatelessWidget {
             children: [
               const Spacer(),
               Center(
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(22),
-                  child: Image.asset(
-                    'assets/images/app-logo.png',
-                    width: 72,
-                    height: 72,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => Container(
-                      width: 72,
-                      height: 72,
-                      decoration: BoxDecoration(
-                        color: AppTheme.providerPeach,
-                        borderRadius: BorderRadius.circular(22),
+                child: Container(
+                  width: 130,
+                  height: 130,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppTheme.surface,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.06),
+                        blurRadius: 24,
+                        offset: const Offset(0, 8),
                       ),
-                      child: const Icon(Icons.bolt_rounded, color: AppTheme.providerPrimary, size: 40),
+                    ],
+                  ),
+                  child: ClipOval(
+                    child: Image.asset(
+                      'assets/images/app-logo.png',
+                      fit: BoxFit.contain,
+                      errorBuilder: (ctx, err, stack) => Container(
+                        decoration: BoxDecoration(
+                          color: AppTheme.providerPeach,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.bolt_rounded, color: AppTheme.providerPrimary, size: 50),
+                      ),
                     ),
                   ),
                 ),
               ),
-              const SizedBox(height: 18),
+              const SizedBox(height: 20),
               const Text(
                 'Instant Local Services',
                 style: TextStyle(

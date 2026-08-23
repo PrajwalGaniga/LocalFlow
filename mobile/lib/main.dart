@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'screens/role_select_screen.dart';
+import 'screens/splash_screen.dart';
 import 'theme/app_theme.dart';
 
 void main() {
@@ -16,7 +16,7 @@ class LocalFlowApp extends StatelessWidget {
       title: 'LocalFlow',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
-      home: const RoleSelectScreen(),
+      home: const SplashScreen(),
     );
   }
 }
