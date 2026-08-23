@@ -1,11 +1,15 @@
 import 'provider.dart';
+import 'service_location.dart';
 
 class ServiceRequest {
   final int id;
   final String consumerPhone;
+  final String? consumerName;
   final String skillRequested;
   final String? description;
-  final String location;
+  final int? locationId;
+  final ServiceLocation? location;
+  final int? preferredProviderId;
   final String status; // pending, matched, completed, cancelled
   final String paymentStatus; // unpaid, paid
   final DateTime? paidAt;
@@ -20,9 +24,12 @@ class ServiceRequest {
   ServiceRequest({
     required this.id,
     required this.consumerPhone,
+    this.consumerName,
     required this.skillRequested,
     this.description,
-    required this.location,
+    this.locationId,
+    this.location,
+    this.preferredProviderId,
     required this.status,
     this.paymentStatus = 'unpaid',
     this.paidAt,
@@ -39,14 +46,34 @@ class ServiceRequest {
   bool get isMatched => status.toLowerCase() == 'matched';
   bool get isCompleted => status.toLowerCase() == 'completed';
   bool get isPending => status.toLowerCase() == 'pending';
+  bool get isCancelled => status.toLowerCase() == 'cancelled';
+
+  String get locationName => location?.areaName ?? 'Local Area';
+  String get locationFull => location?.formattedArea ?? locationName;
 
   factory ServiceRequest.fromJson(Map<String, dynamic> json) {
+    ServiceLocation? loc;
+    if (json['location'] is Map<String, dynamic>) {
+      loc = ServiceLocation.fromJson(json['location'] as Map<String, dynamic>);
+    } else if (json['location'] is String) {
+      loc = ServiceLocation(
+        id: json['location_id'] as int? ?? 1,
+        state: 'Karnataka',
+        district: 'Bengaluru Urban',
+        areaName: json['location'] as String,
+        pincode: '',
+      );
+    }
+
     return ServiceRequest(
       id: json['id'] as int,
       consumerPhone: json['consumer_phone'] as String? ?? '',
+      consumerName: json['consumer_name'] as String?,
       skillRequested: json['skill_requested'] as String? ?? '',
       description: json['description'] as String?,
-      location: json['location'] as String? ?? '',
+      locationId: json['location_id'] as int? ?? loc?.id,
+      location: loc,
+      preferredProviderId: json['preferred_provider_id'] as int?,
       status: json['status'] as String? ?? 'pending',
       paymentStatus: json['payment_status'] as String? ?? 'unpaid',
       paidAt: json['paid_at'] != null ? DateTime.tryParse(json['paid_at'].toString()) : null,

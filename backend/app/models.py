@@ -1,5 +1,4 @@
 import enum
-from datetime import datetime
 
 from sqlalchemy import (
     Column,
@@ -15,6 +14,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import relationship
 
 from app.database import Base
+from app.utils.time import now_ist
 
 
 class AvailabilityStatus(str, enum.Enum):
@@ -50,6 +50,19 @@ class NotificationStatus(str, enum.Enum):
     expired = "expired"
 
 
+class ServiceLocation(Base):
+    __tablename__ = "service_locations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    state = Column(String(50), nullable=False, default="Karnataka")
+    district = Column(String(50), nullable=False, index=True)
+    area_name = Column(String(100), nullable=False, index=True)
+    pincode = Column(String(10), nullable=False)
+
+    providers = relationship("Provider", back_populates="location")
+    requests = relationship("ServiceRequest", back_populates="location", foreign_keys="ServiceRequest.location_id")
+
+
 class Provider(Base):
     __tablename__ = "providers"
 
@@ -58,7 +71,9 @@ class Provider(Base):
     phone = Column(String(20), unique=False, nullable=False, index=True)  # Multiple profiles allowed per phone
     password = Column(String(120), nullable=True)  # Unhashed password as requested
     skill = Column(String(80), nullable=False, index=True)  # e.g. "electrician", "plumber"
-    location = Column(String(120), nullable=False, index=True)  # locality / neighborhood
+
+    location_id = Column(Integer, ForeignKey("service_locations.id"), nullable=True, index=True)
+    location = relationship("ServiceLocation", back_populates="providers")
 
     rate_min = Column(Integer, nullable=True)
     rate_max = Column(Integer, nullable=True)
@@ -74,9 +89,9 @@ class Provider(Base):
     rating_count = Column(Integer, nullable=False, default=0)
     jobs_completed = Column(Integer, nullable=False, default=0)
 
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=now_ist)
 
-    requests = relationship("ServiceRequest", back_populates="provider")
+    requests = relationship("ServiceRequest", back_populates="provider", foreign_keys="ServiceRequest.provider_id")
     notifications = relationship("RequestNotification", back_populates="provider", cascade="all, delete-orphan")
 
 
@@ -87,7 +102,7 @@ class Consumer(Base):
     name = Column(String(120), nullable=False)
     phone = Column(String(20), unique=True, nullable=False, index=True)
     password = Column(String(120), nullable=True)  # Unhashed password as requested
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=now_ist)
 
 
 class ServiceRequest(Base):
@@ -97,21 +112,27 @@ class ServiceRequest(Base):
     consumer_phone = Column(String(20), nullable=False, index=True)  # Bare 10-digit phone
     skill_requested = Column(String(80), nullable=False, index=True)
     description = Column(Text, nullable=True)
-    location = Column(String(120), nullable=False, index=True)
+
+    location_id = Column(Integer, ForeignKey("service_locations.id"), nullable=True, index=True)
+    location = relationship("ServiceLocation", back_populates="requests", foreign_keys=[location_id])
 
     status = Column(Enum(RequestStatus), nullable=False, default=RequestStatus.pending)
     payment_status = Column(Enum(PaymentStatus), nullable=False, default=PaymentStatus.unpaid)
-    paid_at = Column(DateTime, nullable=True)
+    paid_at = Column(DateTime(timezone=True), nullable=True)
 
     provider_id = Column(Integer, ForeignKey("providers.id"), nullable=True)
-    provider = relationship("Provider", back_populates="requests")
+    provider = relationship("Provider", back_populates="requests", foreign_keys=[provider_id])
+
+    # Direct request / preferred provider support
+    preferred_provider_id = Column(Integer, ForeignKey("providers.id"), nullable=True)
+    preferred_provider = relationship("Provider", foreign_keys=[preferred_provider_id])
 
     rating = Column(Integer, nullable=True)          # 1-5, set on completion
     rating_comment = Column(Text, nullable=True)
 
-    created_at = Column(DateTime, default=datetime.utcnow)
-    matched_at = Column(DateTime, nullable=True)
-    completed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=now_ist)
+    matched_at = Column(DateTime(timezone=True), nullable=True)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
 
     notifications = relationship("RequestNotification", back_populates="request", cascade="all, delete-orphan")
 
@@ -123,8 +144,8 @@ class RequestNotification(Base):
     request_id = Column(Integer, ForeignKey("service_requests.id"), nullable=False, index=True)
     provider_id = Column(Integer, ForeignKey("providers.id"), nullable=False, index=True)
     status = Column(Enum(NotificationStatus), nullable=False, default=NotificationStatus.notified)
-    notified_at = Column(DateTime, default=datetime.utcnow)
-    responded_at = Column(DateTime, nullable=True)
+    notified_at = Column(DateTime(timezone=True), default=now_ist)
+    responded_at = Column(DateTime(timezone=True), nullable=True)
 
     request = relationship("ServiceRequest", back_populates="notifications")
     provider = relationship("Provider", back_populates="notifications")
@@ -136,7 +157,7 @@ class RegistrationLink(Base):
     token = Column(String(64), primary_key=True, index=True)
     phone = Column(String(20), nullable=False, index=True)
     role = Column(String(20), nullable=False)  # 'provider' or 'consumer'
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=now_ist)
     used = Column(Boolean, default=False)
 
 
@@ -144,5 +165,4 @@ class ProcessedMessage(Base):
     __tablename__ = "processed_messages"
 
     message_sid = Column(String(64), primary_key=True, index=True)
-    processed_at = Column(DateTime, default=datetime.utcnow)
-
+    processed_at = Column(DateTime(timezone=True), default=now_ist)

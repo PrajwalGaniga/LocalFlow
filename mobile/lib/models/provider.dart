@@ -1,9 +1,12 @@
+import 'service_location.dart';
+
 class Provider {
   final int id;
   final String name;
   final String phone;
   final String skill;
-  final String location;
+  final int? locationId;
+  final ServiceLocation? location;
   final int? rateMin;
   final int? rateMax;
   final String availabilityStatus;
@@ -18,7 +21,8 @@ class Provider {
     required this.name,
     required this.phone,
     required this.skill,
-    required this.location,
+    this.locationId,
+    this.location,
     this.rateMin,
     this.rateMax,
     required this.availabilityStatus,
@@ -29,13 +33,30 @@ class Provider {
     this.createdAt,
   });
 
+  String get locationName => location?.areaName ?? 'Local Area';
+  String get locationFull => location?.formattedArea ?? locationName;
+
   factory Provider.fromJson(Map<String, dynamic> json) {
+    ServiceLocation? loc;
+    if (json['location'] is Map<String, dynamic>) {
+      loc = ServiceLocation.fromJson(json['location'] as Map<String, dynamic>);
+    } else if (json['location'] is String) {
+      loc = ServiceLocation(
+        id: json['location_id'] as int? ?? 1,
+        state: 'Karnataka',
+        district: 'Bengaluru Urban',
+        areaName: json['location'] as String,
+        pincode: '',
+      );
+    }
+
     return Provider(
       id: json['id'] as int,
       name: json['name'] as String? ?? '',
       phone: json['phone'] as String? ?? '',
       skill: json['skill'] as String? ?? '',
-      location: json['location'] as String? ?? '',
+      locationId: json['location_id'] as int? ?? loc?.id,
+      location: loc,
       rateMin: json['rate_min'] as int?,
       rateMax: json['rate_max'] as int?,
       availabilityStatus: json['availability_status'] as String? ?? 'available_now',
@@ -53,7 +74,7 @@ class Provider {
       'name': name,
       'phone': phone,
       'skill': skill,
-      'location': location,
+      'location_id': locationId,
       'rate_min': rateMin,
       'rate_max': rateMax,
       'availability_status': availabilityStatus,

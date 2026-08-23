@@ -1,4 +1,3 @@
-from datetime import datetime
 import secrets
 from typing import List, Optional
 
@@ -7,6 +6,41 @@ from sqlalchemy import func
 
 from app import models, schemas
 from app.phone_utils import normalize_whatsapp_number
+from app.utils.time import now_ist
+
+
+# ---------- Location Operations ----------
+
+def get_locations(db: Session) -> List[models.ServiceLocation]:
+    """Returns all supported service locations."""
+    return db.query(models.ServiceLocation).order_by(
+        models.ServiceLocation.district.asc(),
+        models.ServiceLocation.area_name.asc(),
+    ).all()
+
+
+def get_districts(db: Session) -> List[str]:
+    """Returns a list of distinct registered districts."""
+    results = db.query(models.ServiceLocation.district).distinct().order_by(models.ServiceLocation.district.asc()).all()
+    return [r[0] for r in results]
+
+
+def get_locations_by_district(db: Session, district: str) -> List[models.ServiceLocation]:
+    """Returns all service locations in a given district."""
+    return db.query(models.ServiceLocation).filter(
+        func.lower(models.ServiceLocation.district) == district.strip().lower()
+    ).order_by(models.ServiceLocation.area_name.asc()).all()
+
+
+def get_location_by_area(db: Session, area_name: str) -> Optional[models.ServiceLocation]:
+    """Lookup a location by area name (case-insensitive)."""
+    return db.query(models.ServiceLocation).filter(
+        func.lower(models.ServiceLocation.area_name) == area_name.strip().lower()
+    ).first()
+
+
+def get_location_by_id(db: Session, location_id: int) -> Optional[models.ServiceLocation]:
+    return db.get(models.ServiceLocation, location_id)
 
 
 # ---------- Provider Operations ----------
@@ -17,10 +51,11 @@ def create_provider(db: Session, data: schemas.ProviderCreate) -> models.Provide
         phone=normalize_whatsapp_number(data.phone),
         password=data.password,
         skill=data.skill.strip().lower(),
-        location=data.location.strip().lower(),
+        location_id=data.location_id,
         rate_min=data.rate_min,
         rate_max=data.rate_max,
         availability_status=data.availability_status,
+        created_at=now_ist(),
     )
     db.add(provider)
     db.commit()
@@ -49,8 +84,8 @@ def update_provider(
         provider.name = data.name.strip()
     if data.skill is not None:
         provider.skill = data.skill.strip().lower()
-    if data.location is not None:
-        provider.location = data.location.strip().lower()
+    if data.location_id is not None:
+        provider.location_id = data.location_id
     if data.rate_min is not None:
         provider.rate_min = data.rate_min
     if data.rate_max is not None:
@@ -66,6 +101,33 @@ def update_provider(
 
 def list_providers(db: Session) -> List[models.Provider]:
     return db.query(models.Provider).order_by(models.Provider.id).all()
+
+
+def browse_providers(
+    db: Session, skill: Optional[str] = None, location_id: Optional[int] = None
+) -> List[models.Provider]:
+    """
+    Browse providers with optional skill & location_id filters.
+    Returns all matching available providers sorted by rating and jobs count.
+    """
+    query = db.query(models.Provider).filter(
+        models.Provider.availability_status != models.AvailabilityStatus.offline
+    )
+
+    if skill and skill.strip():
+        query = query.filter(func.lower(models.Provider.skill) == skill.strip().lower())
+
+    if location_id is not None:
+        query = query.filter(models.Provider.location_id == location_id)
+
+    providers = query.all()
+
+    def sort_key(p: models.Provider):
+        availability_rank = 0 if p.availability_status == models.AvailabilityStatus.available_now else 1
+        return (availability_rank, -p.rating_avg, -p.jobs_completed)
+
+    providers.sort(key=sort_key)
+    return providers
 
 
 def update_availability(
@@ -95,11 +157,13 @@ def get_provider_wallet_data(db: Session, provider: models.Provider) -> schemas.
         if is_paid or is_completed:
             total_earnings += est_amount
 
+        loc_str = req.location.area_name if req.location else "Local Area"
+
         transactions.append(schemas.ProviderWalletTransaction(
             request_id=req.id,
             consumer_phone=req.consumer_phone,
             skill=req.skill_requested,
-            location=req.location,
+            location=loc_str,
             amount=est_amount,
             status="Paid" if is_paid else (req.status.value.title()),
             paid_at=req.paid_at,
@@ -122,17 +186,15 @@ def get_distinct_skills(db: Session) -> List[str]:
     """Returns a list of distinct registered skills."""
     skills = db.query(models.Provider.skill).distinct().all()
     result = {s[0].lower() for s in skills if s[0]}
-    # Include standard defaults
     defaults = {"electrician", "plumber", "tutor", "tailor", "carpenter", "painter"}
     return sorted(list(result.union(defaults)))
 
 
 def get_distinct_locations(db: Session) -> List[str]:
-    """Returns a list of distinct registered localities."""
-    locs = db.query(models.Provider.location).distinct().all()
+    """Returns a list of distinct registered area names."""
+    locs = db.query(models.ServiceLocation.area_name).distinct().all()
     result = {l[0].lower() for l in locs if l[0]}
-    defaults = {"koramangala", "indiranagar", "hsr layout", "whitefield", "jayanagar", "marathahalli"}
-    return sorted(list(result.union(defaults)))
+    return sorted(list(result))
 
 
 # ---------- Consumer Operations ----------
@@ -142,6 +204,7 @@ def create_consumer(db: Session, data: schemas.ConsumerCreate) -> models.Consume
         name=data.name.strip(),
         phone=normalize_whatsapp_number(data.phone),
         password=data.password,
+        created_at=now_ist(),
     )
     db.add(consumer)
     db.commit()
@@ -169,7 +232,9 @@ def create_request(db: Session, data: schemas.ServiceRequestCreate) -> models.Se
         consumer_phone=normalize_whatsapp_number(data.consumer_phone),
         skill_requested=data.skill_requested.strip().lower(),
         description=data.description,
-        location=data.location.strip().lower(),
+        location_id=data.location_id,
+        preferred_provider_id=data.preferred_provider_id,
+        created_at=now_ist(),
     )
     db.add(req)
     db.commit()
@@ -195,7 +260,7 @@ def get_consumer_requests(db: Session, consumer_phone: str) -> List[models.Servi
 def find_matches(db: Session, request: models.ServiceRequest, limit: int = 5) -> List[models.Provider]:
     """
     Matching algorithm:
-    1. Filter by matching skill and location (case-insensitive)
+    1. Filter by matching skill and location_id
     2. Exclude offline providers
     3. Sort by:
        - Availability (available_now preferred first)
@@ -203,11 +268,10 @@ def find_matches(db: Session, request: models.ServiceRequest, limit: int = 5) ->
        - Jobs completed count (descending)
     """
     req_skill = request.skill_requested.strip().lower()
-    req_loc = request.location.strip().lower()
 
     query = db.query(models.Provider).filter(
         func.lower(models.Provider.skill) == req_skill,
-        func.lower(models.Provider.location) == req_loc,
+        models.Provider.location_id == request.location_id,
         models.Provider.availability_status != models.AvailabilityStatus.offline,
     )
     providers = query.all()
@@ -224,7 +288,6 @@ def try_claim_request(db: Session, request_id: int, provider_id: int) -> bool:
     """
     Atomically assigns provider_id to request_id only if the request is still pending.
     Returns True if this call won the claim, False if someone/something already claimed it.
-    Must be a single UPDATE ... WHERE status = 'pending' ... — not a read then a write.
     """
     affected_rows = db.query(models.ServiceRequest).filter(
         models.ServiceRequest.id == request_id,
@@ -233,7 +296,7 @@ def try_claim_request(db: Session, request_id: int, provider_id: int) -> bool:
         {
             models.ServiceRequest.status: models.RequestStatus.matched,
             models.ServiceRequest.provider_id: provider_id,
-            models.ServiceRequest.matched_at: datetime.utcnow(),
+            models.ServiceRequest.matched_at: now_ist(),
         },
         synchronize_session=False,
     )
@@ -246,7 +309,7 @@ def select_provider(
 ) -> models.ServiceRequest:
     request.provider_id = provider.id
     request.status = models.RequestStatus.matched
-    request.matched_at = datetime.utcnow()
+    request.matched_at = now_ist()
     db.commit()
     db.refresh(request)
     return request
@@ -254,7 +317,7 @@ def select_provider(
 
 def mark_request_paid(db: Session, request: models.ServiceRequest) -> models.ServiceRequest:
     request.payment_status = models.PaymentStatus.paid
-    request.paid_at = datetime.utcnow()
+    request.paid_at = now_ist()
     db.commit()
     db.refresh(request)
     return request
@@ -266,7 +329,7 @@ def complete_request(
     request.status = models.RequestStatus.completed
     request.rating = rating
     request.rating_comment = comment
-    request.completed_at = datetime.utcnow()
+    request.completed_at = now_ist()
 
     provider = request.provider
     if provider is not None:
@@ -295,7 +358,7 @@ def cancel_request(db: Session, request: models.ServiceRequest) -> models.Servic
     return request
 
 
-# ---------- Notification & Message Deduplication Operations ----------
+# ---------- Notification Operations ----------
 
 def is_message_processed(db: Session, message_sid: str) -> bool:
     """Checks if a Twilio message SID was already recorded."""
@@ -304,7 +367,7 @@ def is_message_processed(db: Session, message_sid: str) -> bool:
 
 def record_processed_message(db: Session, message_sid: str) -> models.ProcessedMessage:
     """Records a processed message SID for deduplication."""
-    msg = models.ProcessedMessage(message_sid=message_sid)
+    msg = models.ProcessedMessage(message_sid=message_sid, processed_at=now_ist())
     db.add(msg)
     try:
         db.commit()
@@ -319,6 +382,7 @@ def create_notification(db: Session, request_id: int, provider_id: int) -> model
         request_id=request_id,
         provider_id=provider_id,
         status=models.NotificationStatus.notified,
+        notified_at=now_ist(),
     )
     db.add(notif)
     db.commit()
@@ -352,7 +416,7 @@ def decline_notification(db: Session, request_id: int, provider_id: int) -> bool
     notif = get_notification(db, request_id, provider_id)
     if notif:
         notif.status = models.NotificationStatus.declined
-        notif.responded_at = datetime.utcnow()
+        notif.responded_at = now_ist()
         db.commit()
         return True
     return False
@@ -366,6 +430,7 @@ def create_registration_link(db: Session, phone: str, role: str = "provider") ->
         token=token,
         phone=normalize_whatsapp_number(phone),
         role=role.lower(),
+        created_at=now_ist(),
         used=False,
     )
     db.add(link)
@@ -383,4 +448,3 @@ def mark_registration_link_used(db: Session, link: models.RegistrationLink) -> m
     db.commit()
     db.refresh(link)
     return link
-

@@ -237,7 +237,7 @@ def get_registration_page(token: str, db: Session = Depends(get_db)):
 
     # Fetch distinct skills & locations for dropdowns
     skills = crud.get_distinct_skills(db)
-    locations = crud.get_distinct_locations(db)
+    locations = crud.get_locations(db)
 
     is_provider = (link.role.lower() == "provider")
     badge_text = "Service Provider Registration" if is_provider else "Customer Registration"
@@ -245,7 +245,7 @@ def get_registration_page(token: str, db: Session = Depends(get_db)):
     subtitle_text = "Start receiving customer leads directly on WhatsApp" if is_provider else "Start finding verified local pros"
 
     skill_options = "".join([f'<option value="{s}">{s.title()}</option>' for s in skills])
-    location_options = "".join([f'<option value="{l}">{l.title()}</option>' for l in locations])
+    location_options = "".join([f'<option value="{l.id}">{l.area_name} ({l.district})</option>' for l in locations])
 
     provider_fields = f"""
         <div class="form-group">
@@ -338,12 +338,22 @@ def submit_registration(
 
     clean_role = role.lower().strip()
     if clean_role == "provider":
+        # Determine location_id
+        loc_id = 1
+        if location:
+            if location.isdigit():
+                loc_id = int(location)
+            else:
+                found_loc = crud.get_location_by_area(db, location)
+                if found_loc:
+                    loc_id = found_loc.id
+
         # Create Provider
         provider_data = schemas.ProviderCreate(
             name=name.strip(),
             phone=phone.strip(),
             skill=skill.strip().lower() if skill else "electrician",
-            location=location.strip().lower() if location else "koramangala",
+            location_id=loc_id,
             rate_min=rate_min,
             rate_max=rate_max,
             password=password.strip() if password else None,

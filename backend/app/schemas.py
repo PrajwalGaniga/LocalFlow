@@ -13,13 +13,25 @@ class PhoneLoginIn(BaseModel):
     password: Optional[str] = None
 
 
+# ---------- Location Schemas ----------
+
+class ServiceLocationOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    state: str = "Karnataka"
+    district: str
+    area_name: str
+    pincode: str
+
+
 # ---------- Provider Schemas ----------
 
 class ProviderCreate(BaseModel):
     name: str
     phone: str
     skill: str
-    location: str
+    location_id: int
     password: Optional[str] = None
     rate_min: Optional[int] = None
     rate_max: Optional[int] = None
@@ -37,9 +49,10 @@ class ProviderOut(BaseModel):
     name: str
     phone: str
     skill: str
-    location: str
-    rate_min: Optional[int]
-    rate_max: Optional[int]
+    location_id: Optional[int] = None
+    location: Optional[ServiceLocationOut] = None
+    rate_min: Optional[int] = None
+    rate_max: Optional[int] = None
     availability_status: AvailabilityStatus
     verification_level: VerificationLevel
     rating_avg: float
@@ -51,7 +64,7 @@ class ProviderOut(BaseModel):
 class ProviderUpdate(BaseModel):
     name: Optional[str] = None
     skill: Optional[str] = None
-    location: Optional[str] = None
+    location_id: Optional[int] = None
     rate_min: Optional[int] = None
     rate_max: Optional[int] = None
     password: Optional[str] = None
@@ -64,7 +77,7 @@ class ProviderWalletTransaction(BaseModel):
     request_id: int
     consumer_phone: str
     skill: str
-    location: str
+    location: Optional[str] = None
     amount: int
     status: str
     paid_at: Optional[datetime] = None
@@ -113,8 +126,9 @@ class ConsumerOut(BaseModel):
 class ServiceRequestCreate(BaseModel):
     consumer_phone: str
     skill_requested: str
+    location_id: int
     description: Optional[str] = None
-    location: str
+    preferred_provider_id: Optional[int] = None
 
 
 class ServiceRequestOut(BaseModel):
@@ -123,17 +137,19 @@ class ServiceRequestOut(BaseModel):
     id: int
     consumer_phone: str
     skill_requested: str
-    description: Optional[str]
-    location: str
+    description: Optional[str] = None
+    location_id: Optional[int] = None
+    location: Optional[ServiceLocationOut] = None
+    preferred_provider_id: Optional[int] = None
     status: RequestStatus
     payment_status: PaymentStatus = PaymentStatus.unpaid
     paid_at: Optional[datetime] = None
-    provider_id: Optional[int]
-    rating: Optional[int]
-    rating_comment: Optional[str]
+    provider_id: Optional[int] = None
+    rating: Optional[int] = None
+    rating_comment: Optional[str] = None
     created_at: datetime
-    matched_at: Optional[datetime]
-    completed_at: Optional[datetime]
+    matched_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
 
 
 class ConsumerRequestOut(BaseModel):
@@ -142,18 +158,20 @@ class ConsumerRequestOut(BaseModel):
     id: int
     consumer_phone: str
     skill_requested: str
-    description: Optional[str]
-    location: str
+    description: Optional[str] = None
+    location_id: Optional[int] = None
+    location: Optional[ServiceLocationOut] = None
+    preferred_provider_id: Optional[int] = None
     status: RequestStatus
     payment_status: PaymentStatus
-    paid_at: Optional[datetime]
-    provider_id: Optional[int]
+    paid_at: Optional[datetime] = None
+    provider_id: Optional[int] = None
     provider: Optional[ProviderOut] = None
-    rating: Optional[int]
-    rating_comment: Optional[str]
+    rating: Optional[int] = None
+    rating_comment: Optional[str] = None
     created_at: datetime
-    matched_at: Optional[datetime]
-    completed_at: Optional[datetime]
+    matched_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
 
 
 class SelectProviderIn(BaseModel):
@@ -214,4 +232,3 @@ class WhatsAppMessageResponse(BaseModel):
     status: str
     sid: Optional[str] = None
     error: Optional[str] = None
-

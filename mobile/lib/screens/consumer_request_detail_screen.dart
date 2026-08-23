@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../models/service_request.dart';
 import '../services/api_service.dart';
+import '../services/session_manager.dart';
 import '../theme/app_theme.dart';
 
 class ConsumerRequestDetailScreen extends StatefulWidget {
@@ -29,6 +30,16 @@ class _ConsumerRequestDetailScreenState extends State<ConsumerRequestDetailScree
     }
   }
 
+  Future<void> _refreshRequest() async {
+    try {
+      final consumer = SessionManager().currentConsumer;
+      if (consumer == null) return;
+      final reqs = await ApiService().getConsumerRequests(consumer.id);
+      final updated = reqs.firstWhere((r) => r.id == _req.id, orElse: () => _req);
+      if (mounted) setState(() => _req = updated);
+    } catch (_) {}
+  }
+
   void _showPaymentSuccessDialog(String amount) {
     showDialog(
       context: context,
@@ -43,7 +54,7 @@ class _ConsumerRequestDetailScreenState extends State<ConsumerRequestDetailScree
               width: 64,
               height: 64,
               decoration: BoxDecoration(
-                color: AppTheme.success.withValues(alpha: 0.15),
+                color: AppTheme.success.withOpacity(0.15),
                 shape: BoxShape.circle,
               ),
               child: const Icon(Icons.check_circle_rounded, color: AppTheme.success, size: 36),
@@ -168,7 +179,7 @@ class _ConsumerRequestDetailScreenState extends State<ConsumerRequestDetailScree
     final isPending = _req.isPending;
     final isMatched = _req.isMatched;
     final isCompleted = _req.isCompleted;
-    final isCancelled = _req.status.toLowerCase() == 'cancelled';
+    final isCancelled = _req.isCancelled;
     final provider = _req.provider;
 
     final upiAmount = (provider?.rateMin != null) ? '${provider!.rateMin}' : '350';
@@ -180,6 +191,11 @@ class _ConsumerRequestDetailScreenState extends State<ConsumerRequestDetailScree
       appBar: AppBar(
         title: Text('Request #${_req.id}'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh_rounded),
+            tooltip: 'Refresh Status',
+            onPressed: _refreshRequest,
+          ),
           if (!isCompleted && !isCancelled)
             IconButton(
               icon: const Icon(Icons.cancel_outlined, color: AppTheme.error),
@@ -189,214 +205,231 @@ class _ConsumerRequestDetailScreenState extends State<ConsumerRequestDetailScree
         ],
       ),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Header Request Summary Card
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: AppTheme.surface,
-                  borderRadius: BorderRadius.circular(24),
-                  border: Border.all(color: Colors.black.withValues(alpha: 0.04)),
-                  boxShadow: AppTheme.cardShadow,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          _req.skillRequested.toUpperCase(),
-                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppTheme.textPrimary),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: isCompleted
-                                ? AppTheme.success.withValues(alpha: 0.12)
-                                : isMatched
-                                    ? AppTheme.consumerPrimary.withValues(alpha: 0.12)
-                                    : isCancelled
-                                        ? AppTheme.textMuted.withValues(alpha: 0.12)
-                                        : AppTheme.warning.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Text(
-                            _req.status.toUpperCase(),
-                            style: TextStyle(
-                              color: isCompleted
-                                  ? AppTheme.success
-                                  : isMatched
-                                      ? AppTheme.consumerPrimary
-                                      : isCancelled
-                                          ? AppTheme.textMuted
-                                          : AppTheme.warning,
-                              fontWeight: FontWeight.w800,
-                              fontSize: 11,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        const Icon(Icons.location_on_outlined, size: 16, color: AppTheme.consumerPrimary),
-                        const SizedBox(width: 6),
-                        Text(_req.location.toUpperCase(), style: const TextStyle(fontSize: 13, color: AppTheme.textSecondary, fontWeight: FontWeight.w600)),
-                      ],
-                    ),
-                    if (_req.description != null && _req.description!.isNotEmpty) ...[
-                      const SizedBox(height: 10),
-                      Text(_req.description!, style: const TextStyle(fontSize: 13, color: AppTheme.textPrimary, height: 1.3)),
-                    ],
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // Searching Banner
-              if (isPending) ...[
-                Container(
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    color: AppTheme.surface,
-                    borderRadius: BorderRadius.circular(24),
-                    border: Border.all(color: AppTheme.warning.withValues(alpha: 0.3)),
-                    boxShadow: AppTheme.cardShadow,
-                  ),
-                  child: const Column(
-                    children: [
-                      CircularProgressIndicator(color: AppTheme.warning),
-                      SizedBox(height: 16),
-                      Text(
-                        'Reaching out to nearby pros...',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: AppTheme.textPrimary),
-                      ),
-                      SizedBox(height: 6),
-                      Text(
-                        'We have notified verified service providers in your area. As soon as one accepts, their contact and rates will appear here.',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: 12, color: AppTheme.textSecondary, height: 1.4),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-
-              // Assigned Provider Card
-              if (provider != null) ...[
+        child: RefreshIndicator(
+          onRefresh: _refreshRequest,
+          color: AppTheme.consumerPrimary,
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Header Request Summary Card
                 Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
                     color: AppTheme.surface,
                     borderRadius: BorderRadius.circular(24),
-                    border: Border.all(color: Colors.black.withValues(alpha: 0.04)),
+                    border: Border.all(color: Colors.black.withOpacity(0.04)),
                     boxShadow: AppTheme.cardShadow,
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'ASSIGNED SERVICE PRO',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w800,
-                          color: AppTheme.consumerPrimary,
-                          letterSpacing: 0.8,
-                        ),
-                      ),
-                      const SizedBox(height: 14),
                       Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Container(
-                            width: 52,
-                            height: 52,
-                            decoration: BoxDecoration(
-                              gradient: AppTheme.consumerHeroGradient,
-                              shape: BoxShape.circle,
-                            ),
-                            child: Center(
-                              child: Text(
-                                provider.name.isNotEmpty ? provider.name[0].toUpperCase() : 'P',
-                                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Colors.white),
-                              ),
-                            ),
+                          Text(
+                            _req.skillRequested.toUpperCase(),
+                            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppTheme.textPrimary),
                           ),
-                          const SizedBox(width: 14),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  provider.name,
-                                  style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: AppTheme.textPrimary),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  '+91 ${provider.phone}',
-                                  style: const TextStyle(fontSize: 14, color: AppTheme.textSecondary),
-                                ),
-                                const SizedBox(height: 4),
-                                Row(
-                                  children: [
-                                    Text(
-                                      '★ ${provider.ratingAvg}',
-                                      style: const TextStyle(color: AppTheme.warning, fontWeight: FontWeight.w800, fontSize: 12),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      '• ${provider.jobsCompleted} jobs completed',
-                                      style: const TextStyle(color: AppTheme.textMuted, fontSize: 12),
-                                    ),
-                                  ],
-                                ),
-                              ],
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: isCompleted
+                                  ? AppTheme.success.withOpacity(0.12)
+                                  : isMatched
+                                      ? AppTheme.consumerPrimary.withOpacity(0.12)
+                                      : isCancelled
+                                          ? AppTheme.textMuted.withOpacity(0.12)
+                                          : AppTheme.warning.withOpacity(0.12),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              _req.status.toUpperCase(),
+                              style: TextStyle(
+                                color: isCompleted
+                                    ? AppTheme.success
+                                    : isMatched
+                                        ? AppTheme.consumerPrimary
+                                        : isCancelled
+                                            ? AppTheme.textMuted
+                                            : AppTheme.warning,
+                                fontWeight: FontWeight.w800,
+                                fontSize: 11,
+                              ),
                             ),
                           ),
                         ],
                       ),
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          const Icon(Icons.location_on_outlined, size: 16, color: AppTheme.consumerPrimary),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              _req.locationFull.toUpperCase(),
+                              style: const TextStyle(fontSize: 13, color: AppTheme.textSecondary, fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (_req.description != null && _req.description!.isNotEmpty) ...[
+                        const SizedBox(height: 10),
+                        Text(_req.description!, style: const TextStyle(fontSize: 13, color: AppTheme.textPrimary, height: 1.3)),
+                      ],
                     ],
                   ),
                 ),
                 const SizedBox(height: 16),
-              ],
 
-              // Payment Section (QR Code + Done / Canceled Buttons)
-              if (isMatched || isCompleted) ...[
-                Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: AppTheme.surface,
-                    borderRadius: BorderRadius.circular(24),
-                    border: Border.all(color: Colors.black.withValues(alpha: 0.04)),
-                    boxShadow: AppTheme.cardShadow,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text(
-                            'UPI PAYMENT',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w800,
-                              color: AppTheme.consumerPrimary,
-                              letterSpacing: 0.8,
-                            ),
+                // Searching State Banner
+                if (isPending) ...[
+                  Container(
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: AppTheme.surface,
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(color: AppTheme.warning.withOpacity(0.4)),
+                      boxShadow: AppTheme.cardShadow,
+                    ),
+                    child: Column(
+                      children: [
+                        const SizedBox(
+                          width: 48,
+                          height: 48,
+                          child: CircularProgressIndicator(
+                            color: AppTheme.warning,
+                            strokeWidth: 3,
                           ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: _req.isPaid
-                                  ? AppTheme.success.withValues(alpha: 0.12)
-                                  : AppTheme.warning.withValues(alpha: 0.12),
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          '🔍 Searching for available ${_req.skillRequested}s near ${_req.locationName}...',
+                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: AppTheme.textPrimary),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'Nearby verified professionals have been notified. Pull down to refresh status — once accepted, pro details and contact info will appear here!',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(fontSize: 13, color: AppTheme.textSecondary, height: 1.4),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+
+                // Assigned Provider Card
+                if (provider != null) ...[
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: AppTheme.surface,
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(color: Colors.black.withOpacity(0.04)),
+                      boxShadow: AppTheme.cardShadow,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'ASSIGNED SERVICE PRO',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                            color: AppTheme.consumerPrimary,
+                            letterSpacing: 0.8,
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                        Row(
+                          children: [
+                            Container(
+                              width: 52,
+                              height: 52,
+                              decoration: const BoxDecoration(
+                                gradient: AppTheme.consumerHeroGradient,
+                                shape: BoxShape.circle,
+                              ),
+                              child: Center(
+                                child: Text(
+                                  provider.name.isNotEmpty ? provider.name[0].toUpperCase() : 'P',
+                                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Colors.white),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    provider.name,
+                                    style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: AppTheme.textPrimary),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    '+91 ${provider.phone}',
+                                    style: const TextStyle(fontSize: 14, color: AppTheme.textSecondary, fontWeight: FontWeight.w600),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Row(
+                                    children: [
+                                      Text(
+                                        '★ ${provider.ratingAvg}',
+                                        style: const TextStyle(color: AppTheme.warning, fontWeight: FontWeight.w800, fontSize: 12),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        '• ${provider.jobsCompleted} jobs done',
+                                        style: const TextStyle(color: AppTheme.textMuted, fontSize: 12),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+
+                // Payment Section (QR Code + Done / Canceled Buttons)
+                if (isMatched || isCompleted) ...[
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: AppTheme.surface,
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(color: Colors.black.withOpacity(0.04)),
+                      boxShadow: AppTheme.cardShadow,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text(
+                              'UPI PAYMENT',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w800,
+                                color: AppTheme.consumerPrimary,
+                                letterSpacing: 0.8,
+                              ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: _req.isPaid
+                                    ? AppTheme.success.withOpacity(0.12)
+                                    : AppTheme.warning.withOpacity(0.12),
                               borderRadius: BorderRadius.circular(10),
                             ),
                             child: Text(
@@ -417,7 +450,7 @@ class _ConsumerRequestDetailScreenState extends State<ConsumerRequestDetailScree
                           decoration: BoxDecoration(
                             color: Colors.white,
                             borderRadius: BorderRadius.circular(20),
-                            border: Border.all(color: Colors.black.withValues(alpha: 0.06)),
+                            border: Border.all(color: Colors.black.withOpacity(0.06)),
                             boxShadow: AppTheme.cardShadow,
                           ),
                           child: QrImageView(
@@ -439,7 +472,7 @@ class _ConsumerRequestDetailScreenState extends State<ConsumerRequestDetailScree
                               child: OutlinedButton(
                                 onPressed: () {
                                   ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text('Payment cancelled / dismissed.')),
+                                    const SnackBar(content: Text('Payment dismissed.')),
                                   );
                                 },
                                 style: OutlinedButton.styleFrom(
@@ -470,12 +503,12 @@ class _ConsumerRequestDetailScreenState extends State<ConsumerRequestDetailScree
                           ],
                         ),
                       ] else ...[
-                        Row(
+                        const Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            const Icon(Icons.check_circle, color: AppTheme.success, size: 22),
-                            const SizedBox(width: 8),
-                            const Text(
+                            Icon(Icons.check_circle, color: AppTheme.success, size: 22),
+                            SizedBox(width: 8),
+                            Text(
                               'Payment settled directly via UPI',
                               style: TextStyle(
                                 color: AppTheme.success,
@@ -499,7 +532,7 @@ class _ConsumerRequestDetailScreenState extends State<ConsumerRequestDetailScree
                   decoration: BoxDecoration(
                     color: AppTheme.surface,
                     borderRadius: BorderRadius.circular(24),
-                    border: Border.all(color: Colors.black.withValues(alpha: 0.04)),
+                    border: Border.all(color: Colors.black.withOpacity(0.04)),
                     boxShadow: AppTheme.cardShadow,
                   ),
                   child: Column(
@@ -562,9 +595,9 @@ class _ConsumerRequestDetailScreenState extends State<ConsumerRequestDetailScree
                 Container(
                   padding: const EdgeInsets.all(18),
                   decoration: BoxDecoration(
-                    color: AppTheme.success.withValues(alpha: 0.1),
+                    color: AppTheme.success.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: AppTheme.success.withValues(alpha: 0.3)),
+                    border: Border.all(color: AppTheme.success.withOpacity(0.3)),
                   ),
                   child: Row(
                     children: [
@@ -599,6 +632,8 @@ class _ConsumerRequestDetailScreenState extends State<ConsumerRequestDetailScree
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
 }
+}
+

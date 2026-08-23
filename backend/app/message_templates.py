@@ -22,14 +22,16 @@ def template_b_job_confirmed(
     location: str,
     description: str,
     rate_min: int,
-    rate_max: int
+    rate_max: int,
+    consumer_name: str | None = None,
 ) -> str:
     """Template B (Job Confirmed -> provider)"""
     desc = description or "General service requested"
     rates = f"₹{rate_min}–₹{rate_max}" if rate_min and rate_max else "Standard rates"
+    customer_line = f"Customer: {consumer_name} (+91{consumer_phone})" if consumer_name else f"Customer: +91{consumer_phone}"
     return (
         f"✅ Job #{request_id} confirmed — it's yours.\n"
-        f"Customer: +91{consumer_phone}\n"
+        f"{customer_line}\n"
         f"Location: {location}\n"
         f"Details: {desc}\n"
         f"Agreed rate range: {rates}\n\n"

@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import Base, engine
-from app.routers import providers, requests, consumers, registration, twilio_webhook, whatsapp_webhook
+from app.routers import providers, requests, consumers, registration, twilio_webhook, whatsapp_webhook, locations
 from migrate_db import run_migrations
 
 # Create database tables and execute column migrations automatically on startup
@@ -24,6 +24,7 @@ app.add_middleware(
 )
 
 # Include API routers
+app.include_router(locations.router)
 app.include_router(providers.router)
 app.include_router(requests.router)
 app.include_router(consumers.router)

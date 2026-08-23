@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import '../models/provider.dart';
+import '../models/service_location.dart';
 import '../services/api_service.dart';
 import '../services/session_manager.dart';
 import '../theme/app_theme.dart';
+import '../widgets/location_picker_dialog.dart';
 import 'provider_register_screen.dart';
 import 'role_select_screen.dart';
 
@@ -41,10 +43,8 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
     final maxRateController = TextEditingController(text: provider.rateMax?.toString() ?? '600');
 
     final skills = await ApiService().getSkills();
-    final locations = await ApiService().getLocations();
-
     String selectedSkill = skills.contains(provider.skill) ? provider.skill : skills.first;
-    String selectedLocation = locations.contains(provider.location) ? provider.location : locations.first;
+    ServiceLocation? selectedLocation = provider.location;
     String selectedStatus = provider.availabilityStatus;
     bool isSaving = false;
 
@@ -60,6 +60,17 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
       builder: (ctx) {
         return StatefulBuilder(
           builder: (dialogCtx, setModalState) {
+            void chooseLocation() async {
+              final loc = await LocationPickerDialog.show(
+                dialogCtx,
+                initialLocation: selectedLocation,
+                primaryColor: AppTheme.providerPrimary,
+              );
+              if (loc != null) {
+                setModalState(() => selectedLocation = loc);
+              }
+            }
+
             return Padding(
               padding: EdgeInsets.only(
                 left: 24,
@@ -114,19 +125,40 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
                   ),
                   const SizedBox(height: 12),
 
-                  // Location Dropdown
-                  DropdownButtonFormField<String>(
-                    initialValue: selectedLocation,
-                    decoration: const InputDecoration(
-                      labelText: 'Service Locality',
-                      prefixIcon: Icon(Icons.location_on_outlined),
+                  // Location Selector
+                  GestureDetector(
+                    onTap: chooseLocation,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                      decoration: BoxDecoration(
+                        color: AppTheme.surfaceSoft,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.black.withOpacity(0.08)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.location_on_outlined, color: AppTheme.providerPrimary),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Service Locality',
+                                  style: TextStyle(fontSize: 11, color: AppTheme.textSecondary, fontWeight: FontWeight.bold),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  selectedLocation?.formattedArea ?? provider.locationFull,
+                                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppTheme.textPrimary),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const Icon(Icons.keyboard_arrow_down_rounded, color: AppTheme.textSecondary),
+                        ],
+                      ),
                     ),
-                    items: locations
-                        .map((l) => DropdownMenuItem(value: l, child: Text(l[0].toUpperCase() + l.substring(1))))
-                        .toList(),
-                    onChanged: (val) {
-                      if (val != null) setModalState(() => selectedLocation = val);
-                    },
                   ),
                   const SizedBox(height: 12),
 
@@ -187,7 +219,7 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
                                 provider.id,
                                 name: nameController.text.trim(),
                                 skill: selectedSkill,
-                                location: selectedLocation,
+                                locationId: selectedLocation?.id,
                                 rateMin: int.tryParse(minRateController.text.trim()),
                                 rateMax: int.tryParse(maxRateController.text.trim()),
                                 availabilityStatus: selectedStatus,
@@ -276,7 +308,7 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
               icon: const Icon(Icons.logout_rounded, color: AppTheme.error, size: 18),
               label: const Text('Logout from Account', style: TextStyle(color: AppTheme.error, fontWeight: FontWeight.w700)),
               style: OutlinedButton.styleFrom(
-                side: BorderSide(color: AppTheme.error.withValues(alpha: 0.3)),
+                side: BorderSide(color: AppTheme.error.withOpacity(0.3)),
                 padding: const EdgeInsets.symmetric(vertical: 14),
               ),
             ),
@@ -292,7 +324,7 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
       decoration: BoxDecoration(
         color: AppTheme.surface,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.black.withValues(alpha: 0.04)),
+        border: Border.all(color: Colors.black.withOpacity(0.04)),
         boxShadow: AppTheme.cardShadow,
       ),
       child: Row(
@@ -365,7 +397,7 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
       decoration: BoxDecoration(
         color: AppTheme.surface,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.black.withValues(alpha: 0.04)),
+        border: Border.all(color: Colors.black.withOpacity(0.04)),
         boxShadow: AppTheme.cardShadow,
       ),
       child: Column(
@@ -424,7 +456,7 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
                   setState(() {});
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text('Switched to ${p.skill.toUpperCase()} (${p.location.toUpperCase()})'),
+                      content: Text('Switched to ${p.skill.toUpperCase()} (${p.locationName.toUpperCase()})'),
                       backgroundColor: AppTheme.providerPrimary,
                       duration: const Duration(seconds: 1),
                     ),
@@ -449,7 +481,7 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
                       ),
                       const SizedBox(width: 8),
                       Text(
-                        '${p.skill.toUpperCase()} (${p.location.toUpperCase()})',
+                        '${p.skill.toUpperCase()} (${p.locationName.toUpperCase()})',
                         style: TextStyle(
                           color: isSelected ? Colors.white : AppTheme.textPrimary,
                           fontWeight: FontWeight.w700,
@@ -473,7 +505,7 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
       decoration: BoxDecoration(
         color: AppTheme.surface,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.black.withValues(alpha: 0.04)),
+        border: Border.all(color: Colors.black.withOpacity(0.04)),
         boxShadow: AppTheme.cardShadow,
       ),
       child: Column(
@@ -486,7 +518,7 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
           const SizedBox(height: 14),
           _buildInfoRow(Icons.construction_rounded, 'Primary Skill', provider.skill.toUpperCase()),
           const Divider(height: 20, thickness: 0.5),
-          _buildInfoRow(Icons.location_on_outlined, 'Primary Locality', provider.location.toUpperCase()),
+          _buildInfoRow(Icons.location_on_outlined, 'Primary Locality', provider.locationFull.toUpperCase()),
           const Divider(height: 20, thickness: 0.5),
           _buildInfoRow(Icons.currency_rupee_rounded, 'Standard Rates', '₹${provider.rateMin ?? 300} – ₹${provider.rateMax ?? 600} / visit'),
           const Divider(height: 20, thickness: 0.5),

@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import '../models/service_request.dart';
+import '../models/service_location.dart';
 import '../services/api_service.dart';
 import '../services/session_manager.dart';
 import '../theme/app_theme.dart';
+import '../widgets/location_picker_dialog.dart';
+import 'browse_providers_screen.dart';
 import 'consumer_request_detail_screen.dart';
 import 'role_select_screen.dart';
 
@@ -46,10 +49,10 @@ class _ConsumerHomeScreenState extends State<ConsumerHomeScreen> {
     if (consumer == null) return;
 
     final skills = await ApiService().getSkills();
-    final locations = await ApiService().getLocations();
+    final locations = await ApiService().getServiceLocations();
 
     String selectedSkill = skills.first;
-    String selectedLocation = locations.first;
+    ServiceLocation? selectedLocation = locations.isNotEmpty ? locations.first : null;
     final descController = TextEditingController();
     bool isSubmitting = false;
 
@@ -65,6 +68,17 @@ class _ConsumerHomeScreenState extends State<ConsumerHomeScreen> {
       builder: (bottomSheetContext) {
         return StatefulBuilder(
           builder: (dialogCtx, setModalState) {
+            void chooseLocation() async {
+              final loc = await LocationPickerDialog.show(
+                dialogCtx,
+                initialLocation: selectedLocation,
+                primaryColor: AppTheme.consumerPrimary,
+              );
+              if (loc != null) {
+                setModalState(() => selectedLocation = loc);
+              }
+            }
+
             return Padding(
               padding: EdgeInsets.only(
                 left: 24,
@@ -93,7 +107,7 @@ class _ConsumerHomeScreenState extends State<ConsumerHomeScreen> {
                   ),
                   const SizedBox(height: 4),
                   const Text(
-                    'We will automatically notify and match the best available pros in your area.',
+                    'Choose auto-matching or browse verified professionals near you.',
                     style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
                   ),
                   const SizedBox(height: 18),
@@ -114,19 +128,40 @@ class _ConsumerHomeScreenState extends State<ConsumerHomeScreen> {
                   ),
                   const SizedBox(height: 12),
 
-                  // Location Dropdown
-                  DropdownButtonFormField<String>(
-                    initialValue: selectedLocation,
-                    decoration: const InputDecoration(
-                      labelText: 'Your Locality',
-                      prefixIcon: Icon(Icons.location_on_outlined),
+                  // Location Selector
+                  GestureDetector(
+                    onTap: chooseLocation,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                      decoration: BoxDecoration(
+                        color: AppTheme.surfaceSoft,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.black.withOpacity(0.08)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.location_on_outlined, color: AppTheme.consumerPrimary),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Your Locality',
+                                  style: TextStyle(fontSize: 11, color: AppTheme.textSecondary, fontWeight: FontWeight.bold),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  selectedLocation?.formattedArea ?? 'Tap to select Area & District',
+                                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppTheme.textPrimary),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const Icon(Icons.keyboard_arrow_down_rounded, color: AppTheme.textSecondary),
+                        ],
+                      ),
                     ),
-                    items: locations
-                        .map((l) => DropdownMenuItem(value: l, child: Text(l[0].toUpperCase() + l.substring(1))))
-                        .toList(),
-                    onChanged: (val) {
-                      if (val != null) setModalState(() => selectedLocation = val);
-                    },
                   ),
                   const SizedBox(height: 12),
 
@@ -140,18 +175,20 @@ class _ConsumerHomeScreenState extends State<ConsumerHomeScreen> {
                       alignLabelWithHint: true,
                     ),
                   ),
-                  const SizedBox(height: 22),
+                  const SizedBox(height: 20),
 
+                  // Two Action Options: Auto-Match & Browse
                   ElevatedButton(
                     onPressed: isSubmitting
                         ? null
                         : () async {
                             setModalState(() => isSubmitting = true);
                             try {
+                              final locId = selectedLocation?.id ?? 1;
                               await ApiService().createServiceRequest(
                                 consumerPhone: consumer.phone,
                                 skill: selectedSkill,
-                                location: selectedLocation,
+                                locationId: locId,
                                 description: descController.text.trim().isNotEmpty ? descController.text.trim() : null,
                               );
                               if (bottomSheetContext.mounted) Navigator.pop(bottomSheetContext);
@@ -176,7 +213,28 @@ class _ConsumerHomeScreenState extends State<ConsumerHomeScreen> {
                     style: ElevatedButton.styleFrom(backgroundColor: AppTheme.consumerPrimary),
                     child: isSubmitting
                         ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                        : const Text('Find Providers Now ⚡'),
+                        : const Text('⚡ Auto-Match Best Pro Now', style: TextStyle(fontWeight: FontWeight.w800)),
+                  ),
+                  const SizedBox(height: 10),
+
+                  OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(bottomSheetContext);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => BrowseProvidersScreen(
+                            initialSkill: selectedSkill,
+                            initialLocation: selectedLocation,
+                          ),
+                        ),
+                      ).then((_) => _loadRequests());
+                    },
+                    icon: const Icon(Icons.search_rounded, size: 18),
+                    label: const Text('🔍 Browse & Choose a Specific Pro', style: TextStyle(fontWeight: FontWeight.w700)),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
                   ),
                 ],
               ),
@@ -201,39 +259,43 @@ class _ConsumerHomeScreenState extends State<ConsumerHomeScreen> {
       ),
       builder: (modalCtx) {
         return StatefulBuilder(
-          builder: (dialogCtx, setModalState) {
+          builder: (ctx, setModalState) {
             return Padding(
               padding: EdgeInsets.only(
                 left: 24,
                 right: 24,
                 top: 24,
-                bottom: MediaQuery.of(dialogCtx).viewInsets.bottom + 24,
+                bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: AppTheme.surfaceMuted,
-                      borderRadius: BorderRadius.circular(2),
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: AppTheme.surfaceMuted,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 16),
-                  const Text(
-                    'Rate & Complete Job',
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: AppTheme.textPrimary),
-                  ),
-                  const SizedBox(height: 4),
                   Text(
-                    'How was ${req.provider?.name ?? "the pro"}\'s work for Job #${req.id}?',
-                    style: const TextStyle(fontSize: 13, color: AppTheme.textSecondary),
+                    'Rate ${req.provider?.name ?? "Service Provider"}',
+                    style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w800, color: AppTheme.textPrimary),
                     textAlign: TextAlign.center,
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'How was the quality of service provided?',
+                    style: TextStyle(fontSize: 13, color: AppTheme.textSecondary),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 18),
 
-                  // Star Rating Row
+                  // Star Rating Bar
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: List.generate(5, (index) {
@@ -415,7 +477,7 @@ class _ConsumerHomeScreenState extends State<ConsumerHomeScreen> {
     return Container(
       decoration: BoxDecoration(
         color: AppTheme.surface,
-        border: Border(top: BorderSide(color: Colors.black.withValues(alpha: 0.05), width: 1)),
+        border: Border(top: BorderSide(color: Colors.black.withOpacity(0.05), width: 1)),
       ),
       child: BottomNavigationBar(
         currentIndex: _currentNavIndex,
@@ -455,7 +517,7 @@ class _ConsumerHomeScreenState extends State<ConsumerHomeScreen> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.25),
+              color: Colors.white.withOpacity(0.25),
               shape: BoxShape.circle,
             ),
             child: const Icon(Icons.handyman_rounded, color: Colors.white, size: 26),
@@ -541,7 +603,7 @@ class _ConsumerHomeScreenState extends State<ConsumerHomeScreen> {
           decoration: BoxDecoration(
             color: AppTheme.surface,
             borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: Colors.black.withValues(alpha: 0.04)),
+            border: Border.all(color: Colors.black.withOpacity(0.04)),
             boxShadow: AppTheme.cardShadow,
           ),
           child: Column(
@@ -558,7 +620,7 @@ class _ConsumerHomeScreenState extends State<ConsumerHomeScreen> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
                     decoration: BoxDecoration(
-                      color: badgeColor.withValues(alpha: 0.12),
+                      color: badgeColor.withOpacity(0.12),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Text(
@@ -577,13 +639,14 @@ class _ConsumerHomeScreenState extends State<ConsumerHomeScreen> {
                 children: [
                   const Icon(Icons.location_on_outlined, size: 15, color: AppTheme.consumerPrimary),
                   const SizedBox(width: 4),
-                  Text(req.location.toUpperCase(), style: const TextStyle(fontSize: 13, color: AppTheme.textSecondary, fontWeight: FontWeight.w600)),
-                  const Spacer(),
+                  Expanded(
+                    child: Text(req.locationFull.toUpperCase(), style: const TextStyle(fontSize: 13, color: AppTheme.textSecondary, fontWeight: FontWeight.w600)),
+                  ),
                   if (req.isPaid)
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                       decoration: BoxDecoration(
-                        color: AppTheme.success.withValues(alpha: 0.12),
+                        color: AppTheme.success.withOpacity(0.12),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: const Text('PAID ✓', style: TextStyle(color: AppTheme.success, fontSize: 10, fontWeight: FontWeight.w800)),
@@ -686,7 +749,7 @@ class _ConsumerHomeScreenState extends State<ConsumerHomeScreen> {
               decoration: BoxDecoration(
                 color: AppTheme.surface,
                 borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: Colors.black.withValues(alpha: 0.04)),
+                border: Border.all(color: Colors.black.withOpacity(0.04)),
                 boxShadow: AppTheme.cardShadow,
               ),
               child: Row(
@@ -731,7 +794,7 @@ class _ConsumerHomeScreenState extends State<ConsumerHomeScreen> {
               icon: const Icon(Icons.logout_rounded, color: AppTheme.error, size: 18),
               label: const Text('Logout from Account', style: TextStyle(color: AppTheme.error, fontWeight: FontWeight.w700)),
               style: OutlinedButton.styleFrom(
-                side: BorderSide(color: AppTheme.error.withValues(alpha: 0.3)),
+                side: BorderSide(color: AppTheme.error.withOpacity(0.3)),
                 padding: const EdgeInsets.symmetric(vertical: 14),
               ),
             ),

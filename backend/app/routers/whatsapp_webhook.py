@@ -228,28 +228,28 @@ def _handle_consumer_message(db: Session, consumer_phone: str, body: str):
 
 
 def _parse_and_create_service_request(db: Session, consumer_phone: str, text: str):
-    """Extracts skill and location from free-text and creates a service request."""
+    """Extracts skill and location from free-text using ServiceLocation table and creates a service request."""
     text_lower = text.lower()
 
     # 1. Extract skill
     skills = crud.get_distinct_skills(db)
     matched_skill = None
     for s in skills:
-        # Match word boundaries or substring
         if re.search(r"\b" + re.escape(s) + r"\b", text_lower) or s in text_lower:
             matched_skill = s
             break
 
-    # 2. Extract location
-    locations = crud.get_distinct_locations(db)
-    matched_location = None
-    for loc in locations:
-        if loc in text_lower:
-            matched_location = loc
+    # 2. Extract location from ServiceLocation table
+    all_locations = db.query(models.ServiceLocation).all()
+    matched_location_obj = None
+    for loc in all_locations:
+        loc_area = loc.area_name.lower()
+        if re.search(r"\b" + re.escape(loc_area) + r"\b", text_lower) or loc_area in text_lower:
+            matched_location_obj = loc
             break
 
     # If either is missing, ask for clarification (Template I)
-    if not matched_skill or not matched_location:
+    if not matched_skill or not matched_location_obj:
         send_whatsapp_message(consumer_phone, tmpl.template_i_need_more_info())
         return
 
@@ -257,13 +257,14 @@ def _parse_and_create_service_request(db: Session, consumer_phone: str, text: st
     req_data = schemas.ServiceRequestCreate(
         consumer_phone=consumer_phone,
         skill_requested=matched_skill,
-        location=matched_location,
+        location_id=matched_location_obj.id,
         description=text.strip(),
     )
     req = crud.create_request(db, req_data)
 
     # 4. Find matching providers
     matches = crud.find_matches(db, req, limit=3)
+    loc_display = matched_location_obj.area_name.title()
 
     if matches:
         # Notify each matched provider (Template A) and create RequestNotification record
@@ -272,7 +273,7 @@ def _parse_and_create_service_request(db: Session, consumer_phone: str, text: st
             send_whatsapp_message(
                 prov.phone,
                 tmpl.template_a_new_lead(
-                    location=matched_location.title(),
+                    location=loc_display,
                     skill=matched_skill.title(),
                     description=req.description or "General service",
                     request_id=req.id,
@@ -284,7 +285,7 @@ def _parse_and_create_service_request(db: Session, consumer_phone: str, text: st
             consumer_phone,
             tmpl.template_g_searching(
                 skill=matched_skill.title(),
-                location=matched_location.title(),
+                location=loc_display,
                 n=len(matches),
             ),
         )
@@ -294,6 +295,6 @@ def _parse_and_create_service_request(db: Session, consumer_phone: str, text: st
             consumer_phone,
             tmpl.template_h_no_providers(
                 skill=matched_skill.title(),
-                location=matched_location.title(),
+                location=loc_display,
             ),
         )

@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 
 from app import crud, schemas, models
 from app.database import get_db
@@ -41,8 +41,20 @@ def login_provider(payload: schemas.PhoneLoginIn, db: Session = Depends(get_db))
 
 
 @router.get("/", response_model=List[schemas.ProviderOut])
-def list_providers(db: Session = Depends(get_db)):
-    """List all registered service providers."""
+def list_providers(
+    skill: Optional[str] = None,
+    location_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+):
+    """
+    List / Browse service providers.
+    Supports optional filters:
+    - `skill`: Filter by skill (e.g. 'electrician')
+    - `location_id`: Filter by location ID
+    Returns all matching providers sorted by rating and jobs completed.
+    """
+    if skill is not None or location_id is not None:
+        return crud.browse_providers(db, skill=skill, location_id=location_id)
     return crud.list_providers(db)
 
 

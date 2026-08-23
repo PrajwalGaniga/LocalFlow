@@ -7,6 +7,7 @@ import '../models/consumer.dart';
 import '../models/service_request.dart';
 import '../models/notification_item.dart';
 import '../models/provider_wallet.dart';
+import '../models/service_location.dart';
 
 class ApiService {
   static final ApiService _instance = ApiService._internal();
@@ -19,6 +20,41 @@ class ApiService {
         'ngrok-skip-browser-warning': 'true',
         'User-Agent': 'LocalFlowMobileApp/1.0',
       };
+
+  // ---------- Locations ----------
+
+  Future<List<ServiceLocation>> getServiceLocations() async {
+    final uri = Uri.parse('${ApiConfig.baseUrl}/locations/');
+    final res = await http.get(uri, headers: _headers);
+
+    if (res.statusCode == 200) {
+      final List list = jsonDecode(res.body);
+      return list.map((e) => ServiceLocation.fromJson(e)).toList();
+    }
+    return [];
+  }
+
+  Future<List<String>> getDistricts() async {
+    final uri = Uri.parse('${ApiConfig.baseUrl}/locations/districts');
+    final res = await http.get(uri, headers: _headers);
+
+    if (res.statusCode == 200) {
+      final List list = jsonDecode(res.body);
+      return list.map((e) => e.toString()).toList();
+    }
+    return ['Bengaluru Urban', 'Dakshina Kannada', 'Udupi', 'Mysuru'];
+  }
+
+  Future<List<ServiceLocation>> getLocationsByDistrict(String district) async {
+    final uri = Uri.parse('${ApiConfig.baseUrl}/locations/by-district/${Uri.encodeComponent(district)}');
+    final res = await http.get(uri, headers: _headers);
+
+    if (res.statusCode == 200) {
+      final List list = jsonDecode(res.body);
+      return list.map((e) => ServiceLocation.fromJson(e)).toList();
+    }
+    return [];
+  }
 
   // ---------- Provider Auth & Profile ----------
 
@@ -69,7 +105,7 @@ class ApiService {
     required String name,
     required String phone,
     required String skill,
-    required String location,
+    required int locationId,
     int? rateMin,
     int? rateMax,
     String? password,
@@ -83,7 +119,7 @@ class ApiService {
         'name': name.trim(),
         'phone': cleanPhone,
         'skill': skill.trim().toLowerCase(),
-        'location': location.trim().toLowerCase(),
+        'location_id': locationId,
         'rate_min': rateMin,
         'rate_max': rateMax,
         'password': password,
@@ -101,7 +137,7 @@ class ApiService {
     int providerId, {
     String? name,
     String? skill,
-    String? location,
+    int? locationId,
     int? rateMin,
     int? rateMax,
     String? availabilityStatus,
@@ -110,7 +146,7 @@ class ApiService {
     final Map<String, dynamic> body = {};
     if (name != null) body['name'] = name.trim();
     if (skill != null) body['skill'] = skill.trim().toLowerCase();
-    if (location != null) body['location'] = location.trim().toLowerCase();
+    if (locationId != null) body['location_id'] = locationId;
     if (rateMin != null) body['rate_min'] = rateMin;
     if (rateMax != null) body['rate_max'] = rateMax;
     if (availabilityStatus != null) body['availability_status'] = availabilityStatus;
@@ -126,6 +162,21 @@ class ApiService {
     }
     final err = jsonDecode(res.body)['detail'] ?? 'Failed to update profile';
     throw Exception(err);
+  }
+
+  Future<List<Provider>> browseProviders({String? skill, int? locationId}) async {
+    final queryParams = <String, String>{};
+    if (skill != null && skill.isNotEmpty) queryParams['skill'] = skill;
+    if (locationId != null) queryParams['location_id'] = locationId.toString();
+
+    final uri = Uri.parse('${ApiConfig.baseUrl}/providers/').replace(queryParameters: queryParams.isNotEmpty ? queryParams : null);
+    final res = await http.get(uri, headers: _headers);
+
+    if (res.statusCode == 200) {
+      final List list = jsonDecode(res.body);
+      return list.map((e) => Provider.fromJson(e)).toList();
+    }
+    throw Exception('Failed to browse providers: ${res.body}');
   }
 
   Future<ProviderWallet> getProviderWallet(int providerId) async {
@@ -250,8 +301,9 @@ class ApiService {
   Future<ServiceRequest> createServiceRequest({
     required String consumerPhone,
     required String skill,
-    required String location,
+    required int locationId,
     String? description,
+    int? preferredProviderId,
   }) async {
     final cleanPhone = consumerPhone.replaceAll(RegExp(r'\D'), '');
     final uri = Uri.parse('${ApiConfig.baseUrl}/requests/');
@@ -261,8 +313,9 @@ class ApiService {
       body: jsonEncode({
         'consumer_phone': cleanPhone,
         'skill_requested': skill.trim().toLowerCase(),
-        'location': location.trim().toLowerCase(),
+        'location_id': locationId,
         'description': description?.trim(),
+        'preferred_provider_id': preferredProviderId,
       }),
     );
 
@@ -324,17 +377,5 @@ class ApiService {
       }
     } catch (_) {}
     return ['electrician', 'plumber', 'carpenter', 'painter', 'tailor', 'tutor'];
-  }
-
-  Future<List<String>> getLocations() async {
-    try {
-      final uri = Uri.parse('${ApiConfig.baseUrl}/requests/meta/locations');
-      final res = await http.get(uri, headers: _headers);
-      if (res.statusCode == 200) {
-        final List list = jsonDecode(res.body);
-        return list.map((e) => e.toString()).toList();
-      }
-    } catch (_) {}
-    return ['koramangala', 'indiranagar', 'hsr layout', 'whitefield', 'jayanagar', 'marathahalli'];
   }
 }

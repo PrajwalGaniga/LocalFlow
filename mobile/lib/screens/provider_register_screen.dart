@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import '../models/service_location.dart';
 import '../services/api_service.dart';
 import '../services/session_manager.dart';
 import '../theme/app_theme.dart';
+import '../widgets/location_picker_dialog.dart';
 import 'provider_home_screen.dart';
 
 class ProviderRegisterScreen extends StatefulWidget {
@@ -22,10 +24,8 @@ class _ProviderRegisterScreenState extends State<ProviderRegisterScreen> {
   final _passwordController = TextEditingController();
 
   List<String> _skills = ['electrician', 'plumber', 'carpenter', 'painter', 'tailor', 'tutor'];
-  List<String> _locations = ['koramangala', 'indiranagar', 'hsr layout', 'whitefield', 'jayanagar', 'marathahalli'];
-
   String? _selectedSkill;
-  String? _selectedLocation;
+  ServiceLocation? _selectedLocation;
   bool _isLoading = false;
   String? _errorMessage;
 
@@ -38,27 +38,42 @@ class _ProviderRegisterScreenState extends State<ProviderRegisterScreen> {
       _nameController.text = SessionManager().currentProvider!.name;
     }
     _selectedSkill = _skills.first;
-    _selectedLocation = _locations.first;
     _loadMetadata();
   }
 
   Future<void> _loadMetadata() async {
     try {
       final skills = await ApiService().getSkills();
-      final locations = await ApiService().getLocations();
+      final locations = await ApiService().getServiceLocations();
       if (mounted) {
         setState(() {
           _skills = skills;
-          _locations = locations;
           if (!_skills.contains(_selectedSkill)) _selectedSkill = _skills.first;
-          if (!_locations.contains(_selectedLocation)) _selectedLocation = _locations.first;
+          if (locations.isNotEmpty) {
+            _selectedLocation = locations.first;
+          }
         });
       }
     } catch (_) {}
   }
 
+  void _chooseLocation() async {
+    final loc = await LocationPickerDialog.show(
+      context,
+      initialLocation: _selectedLocation,
+      primaryColor: AppTheme.providerPrimary,
+    );
+    if (loc != null) {
+      setState(() => _selectedLocation = loc);
+    }
+  }
+
   Future<void> _handleRegister() async {
     if (!_formKey.currentState!.validate()) return;
+    if (_selectedLocation == null) {
+      setState(() => _errorMessage = 'Please select your service locality');
+      return;
+    }
 
     setState(() {
       _isLoading = true;
@@ -73,7 +88,7 @@ class _ProviderRegisterScreenState extends State<ProviderRegisterScreen> {
         name: _nameController.text.trim(),
         phone: _phoneController.text.trim(),
         skill: _selectedSkill!,
-        location: _selectedLocation!,
+        locationId: _selectedLocation!.id,
         rateMin: rateMin,
         rateMax: rateMax,
         password: _passwordController.text.trim().isNotEmpty ? _passwordController.text.trim() : null,
@@ -129,7 +144,7 @@ class _ProviderRegisterScreenState extends State<ProviderRegisterScreen> {
                   child: Container(
                     width: 56,
                     height: 56,
-                    decoration: BoxDecoration(
+                    decoration: const BoxDecoration(
                       color: AppTheme.providerPeach,
                       shape: BoxShape.circle,
                     ),
@@ -206,22 +221,40 @@ class _ProviderRegisterScreenState extends State<ProviderRegisterScreen> {
                 ),
                 const SizedBox(height: 14),
 
-                // Location Dropdown
-                DropdownButtonFormField<String>(
-                  initialValue: _selectedLocation,
-                  decoration: const InputDecoration(
-                    labelText: 'Primary Locality *',
-                    prefixIcon: Icon(Icons.location_on_outlined),
+                // Location Cascading Selector Tile
+                GestureDetector(
+                  onTap: _chooseLocation,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                    decoration: BoxDecoration(
+                      color: AppTheme.surfaceSoft,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.black.withOpacity(0.08)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.location_on_outlined, color: AppTheme.providerPrimary),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Primary Locality *',
+                                style: TextStyle(fontSize: 11, color: AppTheme.textSecondary, fontWeight: FontWeight.bold),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                _selectedLocation?.formattedArea ?? 'Tap to select Area & District',
+                                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppTheme.textPrimary),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Icon(Icons.keyboard_arrow_down_rounded, color: AppTheme.textSecondary),
+                      ],
+                    ),
                   ),
-                  items: _locations
-                      .map((l) => DropdownMenuItem(
-                            value: l,
-                            child: Text(l[0].toUpperCase() + l.substring(1)),
-                          ))
-                      .toList(),
-                  onChanged: (val) {
-                    if (val != null) setState(() => _selectedLocation = val);
-                  },
                 ),
                 const SizedBox(height: 14),
 
@@ -271,9 +304,9 @@ class _ProviderRegisterScreenState extends State<ProviderRegisterScreen> {
                     padding: const EdgeInsets.all(12),
                     margin: const EdgeInsets.only(bottom: 16),
                     decoration: BoxDecoration(
-                      color: AppTheme.error.withValues(alpha: 0.1),
+                      color: AppTheme.error.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: AppTheme.error.withValues(alpha: 0.3)),
+                      border: Border.all(color: AppTheme.error.withOpacity(0.3)),
                     ),
                     child: Row(
                       children: [

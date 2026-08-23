@@ -1,11 +1,11 @@
 import logging
-from datetime import datetime
-from typing import Optional, Dict, Any
+from typing import Dict, Any
 from sqlalchemy.orm import Session
 
 from app import crud, models
 from app import message_templates as tmpl
 from app.whatsapp_client import send_whatsapp_message
+from app.utils.time import now_ist
 
 logger = logging.getLogger("matching_service")
 
@@ -17,11 +17,12 @@ def accept_notification(db: Session, request_id: int, provider_id: int) -> Dict[
     1. Validates request and provider exist.
     2. Atomically attempts to claim the request using crud.try_claim_request.
     3. If won:
+       - Looks up consumer profile by phone to get consumer name.
        - Updates winning provider's RequestNotification to 'accepted'.
-       - Sends Template B (Job Confirmed) to the winning provider.
+       - Sends Template B (Job Confirmed with Consumer Name) to the winning provider.
        - Sends Template C (Provider Assigned) to the consumer.
        - Expires notifications for all other providers and sends Template D (Already Taken).
-       - Returns structured success result.
+       - Returns structured success result including consumer_name.
     4. If lost:
        - Sends Template D (Already Taken) to the attempting provider if they were notified.
        - Returns structured failure result.
@@ -49,21 +50,28 @@ def accept_notification(db: Session, request_id: int, provider_id: int) -> Dict[
         # Refresh request object to reflect matched status & provider_id
         db.refresh(req)
 
+        # Look up consumer profile to get consumer name if registered
+        consumer = crud.get_consumer_by_phone(db, req.consumer_phone)
+        consumer_name = consumer.name if (consumer and consumer.name) else None
+
         # Update this provider's notification row
         notif = crud.get_notification(db, request_id, provider.id)
         if notif:
             notif.status = models.NotificationStatus.accepted
-            notif.responded_at = datetime.utcnow()
+            notif.responded_at = now_ist()
             db.commit()
 
-        # Send Template B to this provider (Job Confirmed)
+        loc_str = req.location.area_name.title() if req.location else "Local Area"
+
+        # Send Template B to this provider (Job Confirmed with Consumer Name)
         msg_b = tmpl.template_b_job_confirmed(
             request_id=req.id,
             consumer_phone=req.consumer_phone,
-            location=req.location.title(),
+            location=loc_str,
             description=req.description or "General service",
             rate_min=provider.rate_min or 0,
             rate_max=provider.rate_max or 0,
+            consumer_name=consumer_name,
         )
         send_whatsapp_message(provider.phone, msg_b)
 
@@ -82,16 +90,12 @@ def accept_notification(db: Session, request_id: int, provider_id: int) -> Dict[
         for other_notif in all_notifs:
             if other_notif.provider_id != provider.id and other_notif.status == models.NotificationStatus.notified:
                 other_notif.status = models.NotificationStatus.expired
-                other_notif.responded_at = datetime.utcnow()
+                other_notif.responded_at = now_ist()
                 db.commit()
 
                 other_prov = crud.get_provider(db, other_notif.provider_id)
                 if other_prov:
                     send_whatsapp_message(other_prov.phone, tmpl.template_d_already_taken(request_id))
-
-        # Check if consumer profile exists
-        consumer = crud.get_consumer_by_phone(db, req.consumer_phone)
-        consumer_name = consumer.name if consumer else None
 
         return {
             "success": True,
@@ -99,7 +103,7 @@ def accept_notification(db: Session, request_id: int, provider_id: int) -> Dict[
             "request_id": req.id,
             "consumer_phone": req.consumer_phone,
             "consumer_name": consumer_name,
-            "location": req.location,
+            "location": loc_str,
             "description": req.description,
             "rate_min": provider.rate_min,
             "rate_max": provider.rate_max,

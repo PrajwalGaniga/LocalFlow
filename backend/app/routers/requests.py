@@ -13,12 +13,16 @@ def create_request(payload: schemas.ServiceRequestCreate, db: Session = Depends(
     """Create a new service request from a consumer."""
     req = crud.create_request(db, payload)
     
-    # 1. Find all matching providers in the locality
-    matches = crud.find_matches(db, req, limit=5)
-    
-    # 2. ALWAYS create in-app RequestNotification records in DB for all matched providers
-    for provider in matches:
-        crud.create_notification(db, req.id, provider.id)
+    if req.preferred_provider_id is not None:
+        # Direct Request to a specific preferred provider: Notify ONLY this provider
+        preferred = crud.get_provider(db, req.preferred_provider_id)
+        if preferred:
+            crud.create_notification(db, req.id, preferred.id)
+    else:
+        # Auto-match broadcast: Find all matching providers in the locality
+        matches = crud.find_matches(db, req, limit=5)
+        for provider in matches:
+            crud.create_notification(db, req.id, provider.id)
 
     return req
 
