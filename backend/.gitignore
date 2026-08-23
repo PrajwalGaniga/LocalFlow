@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Environment variables
+.env
+.env.local
+
+# Databases & SQLite
+*.sqlite3
+*.db
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs & temporary files
+*.log
+scratch/
+backend-extracted/

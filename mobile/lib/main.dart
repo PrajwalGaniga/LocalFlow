@@ -1,0 +1,22 @@
+import 'package:flutter/material.dart';
+import 'screens/role_select_screen.dart';
+import 'theme/app_theme.dart';
+
+void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  runApp(const LocalFlowApp());
+}
+
+class LocalFlowApp extends StatelessWidget {
+  const LocalFlowApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'LocalFlow',
+      debugShowCheckedModeBanner: false,
+      theme: AppTheme.lightTheme,
+      home: const RoleSelectScreen(),
+    );
+  }
+}
