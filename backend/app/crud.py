@@ -192,7 +192,7 @@ def get_consumer_requests(db: Session, consumer_phone: str) -> List[models.Servi
     ).order_by(models.ServiceRequest.id.desc()).all()
 
 
-def find_matches(db: Session, request: models.ServiceRequest, limit: int = 3) -> List[models.Provider]:
+def find_matches(db: Session, request: models.ServiceRequest, limit: int = 5) -> List[models.Provider]:
     """
     Matching algorithm:
     1. Filter by matching skill and location (case-insensitive)
@@ -202,9 +202,12 @@ def find_matches(db: Session, request: models.ServiceRequest, limit: int = 3) ->
        - Rating average (descending)
        - Jobs completed count (descending)
     """
+    req_skill = request.skill_requested.strip().lower()
+    req_loc = request.location.strip().lower()
+
     query = db.query(models.Provider).filter(
-        models.Provider.skill == request.skill_requested,
-        models.Provider.location == request.location,
+        func.lower(models.Provider.skill) == req_skill,
+        func.lower(models.Provider.location) == req_loc,
         models.Provider.availability_status != models.AvailabilityStatus.offline,
     )
     providers = query.all()

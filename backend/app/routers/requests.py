@@ -13,17 +13,13 @@ def create_request(payload: schemas.ServiceRequestCreate, db: Session = Depends(
     """Create a new service request from a consumer."""
     req = crud.create_request(db, payload)
     
-    # Check if there are matches and optionally notify the top provider
-    matches = crud.find_matches(db, req, limit=1)
-    if matches:
-        top_provider = matches[0]
-        # Notify provider via WhatsApp asynchronously/safely
-        notify_provider_lead(
-            provider_phone=top_provider.phone,
-            service_name=req.skill_requested,
-            location=req.location,
-            request_id=req.id,
-        )
+    # 1. Find all matching providers in the locality
+    matches = crud.find_matches(db, req, limit=5)
+    
+    # 2. ALWAYS create in-app RequestNotification records in DB for all matched providers
+    for provider in matches:
+        crud.create_notification(db, req.id, provider.id)
+
     return req
 
 
